@@ -1,0 +1,54 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+env/
+venv/
+.Python
+
+# Logs
+*.log
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.sw?
+*.sublime-*
+
+# Backup files
+*.bak
+*.tmp
+*.swp
+
+# Compiled files
+*.class
+*.o
+*.so
+*.exe
+*.dll
+*.out
+
+# Coverage and test
+coverage/
+.nyc_output/
+jest-test-results.json
+
+# Others
+*.zip
+*.tar.gz
+*.7z
+*.rar
