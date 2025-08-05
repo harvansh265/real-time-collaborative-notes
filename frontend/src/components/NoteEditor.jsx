@@ -18,7 +18,7 @@ export default function NoteEditor({ note, onSave, onClose }) {
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [labels, setLabels] = useState(note?.labels || [])
   const [newLabel, setNewLabel] = useState("")
-  const { updateNote, joinNote, leaveNote } = useSocket()
+  const { updateNote, joinNote, leaveNote, socket } = useSocket()
 
   const {
     register,
@@ -50,12 +50,37 @@ export default function NoteEditor({ note, onSave, onClose }) {
   useEffect(() => {
     if (note?._id && isDirty) {
       const timeoutId = setTimeout(() => {
-        updateNote(note._id, watchedValues)
+        updateNote(note._id, { ...watchedValues, labels })
       }, 500) // Debounce updates
 
       return () => clearTimeout(timeoutId)
     }
-  }, [watchedValues, note?._id, isDirty, updateNote])
+  }, [watchedValues, labels, note?._id, isDirty, updateNote])
+
+  // Listen for real-time updates from other users
+  useEffect(() => {
+    if (socket && note?._id) {
+      const handleNoteUpdated = ({ noteId, updates, updatedBy }) => {
+        if (noteId === note._id) {
+          console.log(`Note updated by ${updatedBy.username}`)
+
+          // Update form values
+          if (updates.title !== undefined) setValue("title", updates.title)
+          if (updates.content !== undefined) setValue("content", updates.content)
+          if (updates.color !== undefined) setValue("color", updates.color)
+          if (updates.pinned !== undefined) setValue("pinned", updates.pinned)
+          if (updates.archived !== undefined) setValue("archived", updates.archived)
+          if (updates.labels !== undefined) setLabels(updates.labels)
+        }
+      }
+
+      socket.on("note_updated", handleNoteUpdated)
+
+      return () => {
+        socket.off("note_updated", handleNoteUpdated)
+      }
+    }
+  }, [socket, note?._id, setValue])
 
   const onSubmit = async (data) => {
     try {

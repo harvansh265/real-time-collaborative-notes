@@ -3,11 +3,13 @@
 import { useState, useEffect, useCallback } from "react"
 import axios from "axios"
 import toast from "react-hot-toast"
+import { useSocket } from "../contexts/SocketContext"
 
 export const useNotes = () => {
   const [notes, setNotes] = useState([])
   const [loading, setLoading] = useState(true)
   const [availableLabels, setAvailableLabels] = useState([])
+  const { noteListRefreshTrigger, socket } = useSocket()
 
   // Extract unique labels from notes
   const extractLabels = useCallback((notesArray) => {
@@ -84,6 +86,11 @@ export const useNotes = () => {
       // Update available labels if labels were changed
       fetchAllNotesForLabels()
 
+      // Notify other users that this note was saved
+      if (socket) {
+        socket.emit("note_saved", { noteId: noteData._id })
+      }
+
       toast.success("Note updated successfully")
       return response.data
     } catch (error) {
@@ -140,6 +147,44 @@ export const useNotes = () => {
     },
     [fetchNotes],
   )
+
+  // Listen for real-time note updates
+  useEffect(() => {
+    if (socket) {
+      const handleNoteUpdated = ({ noteId, updates, updatedBy }) => {
+        console.log(`Note ${noteId} updated by ${updatedBy.username}`)
+
+        // Update the note in the local state
+        setNotes((prev) =>
+          prev.map((note) => {
+            if (note._id === noteId) {
+              return { ...note, ...updates, updatedAt: new Date().toISOString() }
+            }
+            return note
+          }),
+        )
+
+        // Show a toast notification
+        toast.success(`Note updated by ${updatedBy.username}`, {
+          duration: 3000,
+        })
+      }
+
+      socket.on("note_updated", handleNoteUpdated)
+
+      return () => {
+        socket.off("note_updated", handleNoteUpdated)
+      }
+    }
+  }, [socket])
+
+  // Refresh notes when noteListRefreshTrigger changes
+  useEffect(() => {
+    if (noteListRefreshTrigger > 0) {
+      console.log("Refreshing notes due to trigger")
+      fetchNotes()
+    }
+  }, [noteListRefreshTrigger, fetchNotes])
 
   useEffect(() => {
     fetchNotes()

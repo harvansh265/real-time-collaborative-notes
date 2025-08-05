@@ -94,7 +94,7 @@ module.exports = (io, socket) => {
       await message.save()
       await message.populate("sender", "username email")
 
-      // If it's a note message, populate the shared note with full details
+      // If it's a note message, populate the shared note and grant access to chat participants
       if (sharedNote && messageType === "note") {
         try {
           // Find the note and make sure all chat participants can access it
@@ -109,15 +109,24 @@ module.exports = (io, socket) => {
               (participantId) => participantId !== note.owner.toString() && !currentSharedUsers.includes(participantId),
             )
 
-            // Add new participants to sharedWith with read permission
+            // Add new participants to sharedWith with write permission (so they can edit)
             if (newSharedUsers.length > 0) {
               const newShares = newSharedUsers.map((userId) => ({
                 user: userId,
-                permission: "read",
+                permission: "write", // Changed from "read" to "write" to allow editing
               }))
               note.sharedWith.push(...newShares)
               await note.save()
-              console.log(`Added ${newSharedUsers.length} users to note access`)
+              console.log(`Added ${newSharedUsers.length} users to note access with write permission`)
+
+              // Notify all users who got access to the note that they can now access it
+              newSharedUsers.forEach((userId) => {
+                io.to(`user_${userId}`).emit("note_shared_with_you", {
+                  noteId: note._id,
+                  noteTitle: note.title,
+                  sharedBy: socket.user.username,
+                })
+              })
             }
 
             // Always populate the message with note data for immediate display
@@ -195,6 +204,9 @@ module.exports = (io, socket) => {
           userId: socket.userId,
           username: socket.user.username,
         })
+        console.log(`User ${socket.user.username} joined note ${noteId}`)
+      } else {
+        console.log(`User ${socket.user.username} denied access to note ${noteId}`)
       }
     } catch (error) {
       console.error("Join note error:", error)
@@ -207,6 +219,7 @@ module.exports = (io, socket) => {
       userId: socket.userId,
       username: socket.user.username,
     })
+    console.log(`User ${socket.user.username} left note ${noteId}`)
   })
 
   // Handle real-time note updates
@@ -230,9 +243,44 @@ module.exports = (io, socket) => {
             username: socket.user.username,
           },
         })
+        console.log(`Note ${noteId} updated by ${socket.user.username}`)
       }
     } catch (error) {
       console.error("Note update error:", error)
+    }
+  })
+
+  // Handle note save events (when a note is actually saved to database)
+  socket.on("note_saved", async (data) => {
+    try {
+      const { noteId } = data
+
+      // Find all users who have access to this note
+      const note = await Note.findById(noteId)
+        .populate("owner", "_id username")
+        .populate("sharedWith.user", "_id username")
+
+      if (note) {
+        // Get all user IDs who have access to this note
+        const accessUserIds = [note.owner._id.toString()]
+        note.sharedWith.forEach((share) => {
+          accessUserIds.push(share.user._id.toString())
+        })
+
+        // Broadcast to all users with access (except the one who saved it)
+        accessUserIds.forEach((userId) => {
+          if (userId !== socket.userId) {
+            io.to(`user_${userId}`).emit("note_list_refresh", {
+              noteId,
+              message: "A shared note was updated",
+            })
+          }
+        })
+
+        console.log(`Note ${noteId} save broadcasted to ${accessUserIds.length - 1} users`)
+      }
+    } catch (error) {
+      console.error("Note saved broadcast error:", error)
     }
   })
 

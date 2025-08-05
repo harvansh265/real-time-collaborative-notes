@@ -119,6 +119,7 @@ router.put(
   "/:id",
   [auth, body("title").optional().trim().escape(), body("content").optional().trim()],
   async (req, res) => {
+    console.log("update called")
     try {
       const errors = validationResult(req)
       if (!errors.isEmpty()) {
@@ -202,7 +203,7 @@ router.patch("/bulk", auth, async (req, res) => {
 // Share note
 router.post("/:id/share", auth, async (req, res) => {
   try {
-    const { userIds, permission = "read" } = req.body
+    const { userIds, permission = "write" } = req.body
 
     const note = await Note.findOne({
       _id: req.params.id,
